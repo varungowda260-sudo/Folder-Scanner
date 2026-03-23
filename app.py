@@ -20,6 +20,19 @@ def clean_filename(filename):
     name = re.sub(r'\s*v\d+$', '', name, flags=re.IGNORECASE)
     return name.strip()
 
+# -------- DIFFERENCE FUNCTION --------
+def get_difference(a, b):
+    diff = ""
+    for i in range(max(len(a), len(b))):
+        c1 = a[i] if i < len(a) else ""
+        c2 = b[i] if i < len(b) else ""
+
+        if c1 != c2:
+            diff += f"[{c2}]"
+        else:
+            diff += c2
+    return diff
+
 # -------- SCAN FUNCTION --------
 def scan_files(zip_file, source_files):
     temp_dir = tempfile.mkdtemp()
@@ -40,12 +53,14 @@ def scan_files(zip_file, source_files):
         matched_files = []
         unmatched_files = []
         best_score = 0
+        best_cleaned = ""
 
         for original, cleaned in folder_files:
             score = fuzz.ratio(src, cleaned)
 
             if score > best_score:
                 best_score = score
+                best_cleaned = cleaned
 
             if score >= 80:
                 matched_files.append(original)
@@ -66,12 +81,16 @@ def scan_files(zip_file, source_files):
             match_type = "Not Matched"
             match_flag = "NO"
 
+        # -------- DIFFERENCE --------
+        difference = get_difference(src, best_cleaned)
+
         results.append([
             src,
             match_flag,
             match_type,
             ", ".join(matched_files) if matched_files else "-",
-            ", ".join(unmatched_files) if unmatched_files else "-"
+            ", ".join(unmatched_files) if unmatched_files else "-",
+            difference
         ])
 
     return results
@@ -92,7 +111,8 @@ if st.button("🚀 Run Scan"):
             "YES/NO",
             "Match Type",
             "Matched Files in Folder",
-            "Unmatched Files"
+            "Unmatched Files",
+            "Difference"
         ])
 
         st.success("Scan Completed ✅")
