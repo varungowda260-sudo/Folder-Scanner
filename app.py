@@ -15,13 +15,19 @@ uploaded_zip = st.file_uploader("Upload ZIP Folder", type=["zip"])
 
 # -------- CLEAN --------
 def clean_name(name):
-    return os.path.splitext(name)[0]
+    name = os.path.splitext(name)[0]
+    name = re.sub(r'\s*v\d+$', '', name, flags=re.IGNORECASE)
+    return name.strip()
 
-# -------- ALPHA --------
+# -------- EXTRACT ALPHABETS (PRIMARY MATCH PRIORITY) --------
 def get_alpha(s):
-    return "".join(re.findall(r'[A-Za-z]+', s))
+    return "".join(re.findall(r'[A-Za-z]+', s)).upper()
 
-# -------- DIFFERENCE --------
+# -------- EXTRACT NUMBERS --------
+def get_num(s):
+    return "".join(re.findall(r'\d+', s))
+
+# -------- PRECISE DIFFERENCE --------
 def get_difference(a, b):
     diff = []
     for i in range(max(len(a), len(b))):
@@ -34,14 +40,15 @@ def get_difference(a, b):
             if cb:
                 diff.append(cb)
 
+    # remove duplicates while preserving order
     seen = set()
-    final = []
+    clean_diff = []
     for x in diff:
-        if x not in seen and x != "":
+        if x not in seen and x.strip() != "":
             seen.add(x)
-            final.append(x)
+            clean_diff.append(x)
 
-    return ", ".join(final) if final else "-"
+    return ", ".join(clean_diff) if clean_diff else "-"
 
 # -------- SCAN --------
 def scan_files(zip_file, sources):
@@ -58,6 +65,7 @@ def scan_files(zip_file, sources):
                 "original": file,
                 "clean": cleaned,
                 "alpha": get_alpha(cleaned),
+                "num": get_num(cleaned),
                 "used": False
             })
 
@@ -66,42 +74,38 @@ def scan_files(zip_file, sources):
     for src in sources:
         src_clean = src
         src_alpha = get_alpha(src_clean)
+        src_num = get_num(src_clean)
 
         best = None
         best_score = -1
 
-        # -------- EXACT MATCH --------
         for f in files:
             if f["used"]:
                 continue
-            if src_clean == f["clean"]:
+
+            # PRIMARY FILTER: alphabet match must be strong
+            alpha_score = fuzz.ratio(src_alpha, f["alpha"])
+
+            if alpha_score < 60:
+                continue  # reject weak alphabet matches
+
+            # SECONDARY: full string similarity
+            score = fuzz.ratio(src_clean, f["clean"])
+
+            # PRIORITY: favor alphabet similarity
+            final_score = (0.7 * alpha_score) + (0.3 * score)
+
+            if final_score > best_score:
+                best_score = final_score
                 best = f
-                best_score = 100
-                break
-
-        # -------- CLOSE MATCH --------
-        if not best:
-            for f in files:
-                if f["used"]:
-                    continue
-
-                alpha_score = fuzz.ratio(src_alpha, f["alpha"])
-                if alpha_score < 70:
-                    continue
-
-                score = fuzz.ratio(src_clean, f["clean"])
-
-                if score > best_score:
-                    best_score = score
-                    best = f
 
         # -------- CLASSIFICATION --------
-        if best and best_score == 100:
+        if best and best_score >= 95:
             match_type = "Exact"
             flag = "YES"
             best["used"] = True
 
-        elif best and best_score >= 85:
+        elif best and best_score >= 80:
             match_type = "Close"
             flag = "YES"
             best["used"] = True
@@ -116,6 +120,7 @@ def scan_files(zip_file, sources):
             flag = "NO"
             best = None
 
+        # -------- OUTPUT --------
         if best:
             matched = best["original"]
             unmatched = "-"
@@ -123,7 +128,7 @@ def scan_files(zip_file, sources):
         else:
             matched = "-"
             unmatched = src_clean
-            diff = src_clean
+            diff = src_clean  # full difference
 
         results.append([
             src_clean,
@@ -134,30 +139,16 @@ def scan_files(zip_file, sources):
             diff
         ])
 
-    # -------- UNMAPPED FILES --------
-    unmapped_count = 0
-    for f in files:
-        if not f["used"]:
-            unmapped_count += 1
-            results.append([
-                "-",
-                "NO",
-                "Unmapped File",
-                "-",
-                f["original"],
-                f["original"]
-            ])
-
-    return results, len(files), unmapped_count
+    return results
 
 # -------- RUN --------
 if st.button("🚀 Run Scan"):
     if not uploaded_zip or not source_input:
         st.warning("Upload ZIP and enter source names")
     else:
-        sources = [line for line in source_input.split("\n") if line != ""]
+        sources = [s for s in source_input.split("\n") if s != ""]
 
-        data, total_files, unmapped_count = scan_files(uploaded_zip, sources)
+        data = scan_files(uploaded_zip, sources)
 
         df = pd.DataFrame(data, columns=[
             "Source File Name",
@@ -176,17 +167,3 @@ if st.button("🚀 Run Scan"):
             df.to_csv(index=False),
             file_name="Folder_Scanner_Report.csv"
         )
-
-        # -------- FINAL VALIDATION MESSAGE --------
-        total_sources = len(sources)
-        processed_sources = len([r for r in data if r[0] != "-"])
-
-        # Strict validation conditions
-        condition_1 = processed_sources == total_sources
-        condition_2 = total_files >= 0
-        condition_3 = len(data) >= total_sources
-
-        if condition_1 and condition_2 and condition_3:
-            st.success("✅ All files successfully compared with the source filename")
-        else:
-            st.error("❌ Verification incomplete — some files or sources were not properly processed")
