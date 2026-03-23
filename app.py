@@ -7,104 +7,136 @@ import pandas as pd
 from rapidfuzz import fuzz
 
 st.set_page_config(page_title="Folder Scanner", layout="wide")
-
 st.title("📂 Folder Scanner")
 
 # -------- INPUT --------
 source_input = st.text_area("Enter Source File Names (one per line)")
 uploaded_zip = st.file_uploader("Upload ZIP Folder", type=["zip"])
 
-# -------- CLEAN FILE NAME --------
-def clean_filename(filename):
-    name = os.path.splitext(filename)[0]
+# -------- CLEAN --------
+def clean_name(name):
+    name = os.path.splitext(name)[0]
     name = re.sub(r'\s*v\d+$', '', name, flags=re.IGNORECASE)
     return name.strip()
 
-# -------- DIFFERENCE FUNCTION --------
+# -------- EXTRACT ALPHABETS (PRIMARY MATCH PRIORITY) --------
+def get_alpha(s):
+    return "".join(re.findall(r'[A-Za-z]+', s)).upper()
+
+# -------- EXTRACT NUMBERS --------
+def get_num(s):
+    return "".join(re.findall(r'\d+', s))
+
+# -------- PRECISE DIFFERENCE --------
 def get_difference(a, b):
-    diff = ""
+    diff = []
     for i in range(max(len(a), len(b))):
-        c1 = a[i] if i < len(a) else ""
-        c2 = b[i] if i < len(b) else ""
+        ca = a[i] if i < len(a) else ""
+        cb = b[i] if i < len(b) else ""
 
-        if c1 != c2:
-            diff += f"[{c2}]"
-        else:
-            diff += c2
-    return diff
+        if ca != cb:
+            if ca:
+                diff.append(ca)
+            if cb:
+                diff.append(cb)
 
-# -------- SCAN FUNCTION --------
-def scan_files(zip_file, source_files):
+    # remove duplicates while preserving order
+    seen = set()
+    clean_diff = []
+    for x in diff:
+        if x not in seen and x.strip() != "":
+            seen.add(x)
+            clean_diff.append(x)
+
+    return ", ".join(clean_diff) if clean_diff else "-"
+
+# -------- SCAN --------
+def scan_files(zip_file, sources):
     temp_dir = tempfile.mkdtemp()
 
-    with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-        zip_ref.extractall(temp_dir)
+    with zipfile.ZipFile(zip_file, 'r') as z:
+        z.extractall(temp_dir)
 
-    folder_files = []
-
-    for root, _, files in os.walk(temp_dir):
-        for file in files:
-            cleaned = clean_filename(file)
-            folder_files.append((file, cleaned))
+    files = []
+    for root, _, f in os.walk(temp_dir):
+        for file in f:
+            cleaned = clean_name(file)
+            files.append({
+                "original": file,
+                "clean": cleaned,
+                "alpha": get_alpha(cleaned),
+                "num": get_num(cleaned),
+                "used": False
+            })
 
     results = []
 
-    for src in source_files:
-        matched_files = []
-        weak_unmatched = []
-        strong_unmatched = []
-        best_score = 0
-        best_cleaned = ""
+    for src in sources:
+        src_clean = clean_name(src)
+        src_alpha = get_alpha(src_clean)
+        src_num = get_num(src_clean)
 
-        for original, cleaned in folder_files:
-            score = fuzz.ratio(src, cleaned)
+        best = None
+        best_score = -1
 
-            if score > best_score:
-                best_score = score
-                best_cleaned = cleaned
+        for f in files:
+            if f["used"]:
+                continue
 
-            if score >= 80:
-                matched_files.append(original)
-            elif score >= 30:
-                weak_unmatched.append(original)
-            else:
-                strong_unmatched.append(original)
+            # PRIMARY FILTER: alphabet match must be strong
+            alpha_score = fuzz.ratio(src_alpha, f["alpha"])
+
+            if alpha_score < 60:
+                continue  # reject weak alphabet matches
+
+            # SECONDARY: full string similarity
+            score = fuzz.ratio(src_clean, f["clean"])
+
+            # PRIORITY: favor alphabet similarity
+            final_score = (0.7 * alpha_score) + (0.3 * score)
+
+            if final_score > best_score:
+                best_score = final_score
+                best = f
 
         # -------- CLASSIFICATION --------
-        if best_score == 100:
+        if best and best_score >= 95:
             match_type = "Exact"
-            match_flag = "YES"
-        elif best_score >= 80:
+            flag = "YES"
+            best["used"] = True
+
+        elif best and best_score >= 80:
             match_type = "Close"
-            match_flag = "YES"
-        elif best_score >= 50:
+            flag = "YES"
+            best["used"] = True
+
+        elif best and best_score >= 60:
             match_type = "Partial"
-            match_flag = "NO"
+            flag = "NO"
+            best["used"] = True
+
         else:
             match_type = "Not Matched"
-            match_flag = "NO"
+            flag = "NO"
+            best = None
 
-        # -------- DIFFERENCE --------
-        difference = get_difference(src, best_cleaned)
-
-        # -------- SMART UNMATCHED LOGIC --------
-        if best_score >= 80:
-            matched_output = ", ".join(matched_files)
-            unmatched_output = "-"
-        elif best_score >= 50:
-            matched_output = ", ".join(matched_files) if matched_files else "-"
-            unmatched_output = ", ".join(strong_unmatched) if strong_unmatched else "-"
+        # -------- OUTPUT --------
+        if best:
+            matched = best["original"]
+            unmatched = "-"
+            diff = get_difference(src_clean, best["clean"])
         else:
-            matched_output = "-"
-            unmatched_output = ", ".join([f[0] for f in folder_files])
+            matched = "-"
+            unmatched = src_clean
+            diff = src_clean  # full difference
 
         results.append([
-            src,
-            match_flag,
+            src_clean,
+            flag,
             match_type,
-            matched_output,
-            unmatched_output,
-            difference
+            matched,
+            unmatched,
+            diff
         ])
 
     return results
@@ -112,13 +144,11 @@ def scan_files(zip_file, source_files):
 # -------- RUN --------
 if st.button("🚀 Run Scan"):
     if not uploaded_zip or not source_input:
-        st.warning("Please upload ZIP and enter source file names")
+        st.warning("Upload ZIP and enter source names")
     else:
-        source_files = [s.strip() for s in source_input.split("\n") if s.strip()]
+        sources = [s.strip() for s in source_input.split("\n") if s.strip()]
 
-        st.info("Scanning...")
-
-        data = scan_files(uploaded_zip, source_files)
+        data = scan_files(uploaded_zip, sources)
 
         df = pd.DataFrame(data, columns=[
             "Source File Name",
@@ -132,10 +162,8 @@ if st.button("🚀 Run Scan"):
         st.success("Scan Completed ✅")
         st.dataframe(df, use_container_width=True)
 
-        # DOWNLOAD
         st.download_button(
             "📥 Download Report",
             df.to_csv(index=False),
-            file_name="Folder_Scanner_Report.csv",
-            mime="text/csv"
+            file_name="Folder_Scanner_Report.csv"
         )
