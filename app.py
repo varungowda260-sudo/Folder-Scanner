@@ -6,9 +6,9 @@ import re
 import pandas as pd
 from rapidfuzz import fuzz
 
-st.set_page_config(page_title="Enterprise File Matcher", layout="wide")
+st.set_page_config(page_title="Folder Scanner", layout="wide")
 
-st.title("📂 Enterprise File Matcher")
+st.title("📂 Folder Scanner")
 
 # -------- INPUT --------
 source_input = st.text_area("Enter Source File Names (one per line)")
@@ -51,7 +51,8 @@ def scan_files(zip_file, source_files):
 
     for src in source_files:
         matched_files = []
-        unmatched_files = []
+        weak_unmatched = []
+        strong_unmatched = []
         best_score = 0
         best_cleaned = ""
 
@@ -64,8 +65,10 @@ def scan_files(zip_file, source_files):
 
             if score >= 80:
                 matched_files.append(original)
+            elif score >= 30:
+                weak_unmatched.append(original)
             else:
-                unmatched_files.append(original)
+                strong_unmatched.append(original)
 
         # -------- CLASSIFICATION --------
         if best_score == 100:
@@ -84,12 +87,23 @@ def scan_files(zip_file, source_files):
         # -------- DIFFERENCE --------
         difference = get_difference(src, best_cleaned)
 
+        # -------- SMART UNMATCHED LOGIC --------
+        if best_score >= 80:
+            matched_output = ", ".join(matched_files)
+            unmatched_output = "-"
+        elif best_score >= 50:
+            matched_output = ", ".join(matched_files) if matched_files else "-"
+            unmatched_output = ", ".join(strong_unmatched) if strong_unmatched else "-"
+        else:
+            matched_output = "-"
+            unmatched_output = ", ".join([f[0] for f in folder_files])
+
         results.append([
             src,
             match_flag,
             match_type,
-            ", ".join(matched_files) if matched_files else "-",
-            ", ".join(unmatched_files) if unmatched_files else "-",
+            matched_output,
+            unmatched_output,
             difference
         ])
 
@@ -122,6 +136,6 @@ if st.button("🚀 Run Scan"):
         st.download_button(
             "📥 Download Report",
             df.to_csv(index=False),
-            file_name="Final_Report.csv",
+            file_name="Folder_Scanner_Report.csv",
             mime="text/csv"
         )
