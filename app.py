@@ -13,17 +13,21 @@ st.title("📂 Folder Scanner")
 source_input = st.text_area("Enter Source File Names (one per line)")
 uploaded_zip = st.file_uploader("Upload ZIP Folder", type=["zip"])
 
-# -------- CLEAN (ONLY REMOVE EXTENSION + VERSION SUFFIX) --------
+# -------- CLEAN --------
 def clean_name(name):
     name = os.path.splitext(name)[0]
     name = re.sub(r'\s*v\d+$', '', name, flags=re.IGNORECASE)
-    return name  # DO NOT strip spaces (precision requirement)
+    return name.strip()
 
-# -------- EXTRACT ALPHABETS --------
+# -------- EXTRACT ALPHABETS (PRIMARY MATCH PRIORITY) --------
 def get_alpha(s):
-    return "".join(re.findall(r'[A-Za-z]+', s))
+    return "".join(re.findall(r'[A-Za-z]+', s)).upper()
 
-# -------- DIFFERENCE (STRICT, NO JUNK) --------
+# -------- EXTRACT NUMBERS --------
+def get_num(s):
+    return "".join(re.findall(r'\d+', s))
+
+# -------- PRECISE DIFFERENCE --------
 def get_difference(a, b):
     diff = []
     for i in range(max(len(a), len(b))):
@@ -36,15 +40,15 @@ def get_difference(a, b):
             if cb:
                 diff.append(cb)
 
-    # remove duplicates, keep order
+    # remove duplicates while preserving order
     seen = set()
-    final = []
+    clean_diff = []
     for x in diff:
         if x not in seen and x.strip() != "":
             seen.add(x)
-            final.append(x)
+            clean_diff.append(x)
 
-    return ", ".join(final) if final else "-"
+    return ", ".join(clean_diff) if clean_diff else "-"
 
 # -------- SCAN --------
 def scan_files(zip_file, sources):
@@ -61,15 +65,16 @@ def scan_files(zip_file, sources):
                 "original": file,
                 "clean": cleaned,
                 "alpha": get_alpha(cleaned),
+                "num": get_num(cleaned),
                 "used": False
             })
 
     results = []
 
-    # -------- MATCH EACH SOURCE --------
     for src in sources:
         src_clean = clean_name(src)
         src_alpha = get_alpha(src_clean)
+        src_num = get_num(src_clean)
 
         best = None
         best_score = -1
@@ -78,13 +83,17 @@ def scan_files(zip_file, sources):
             if f["used"]:
                 continue
 
+            # PRIMARY FILTER: alphabet match must be strong
             alpha_score = fuzz.ratio(src_alpha, f["alpha"])
 
             if alpha_score < 60:
-                continue
+                continue  # reject weak alphabet matches
 
-            full_score = fuzz.ratio(src_clean, f["clean"])
-            final_score = (0.7 * alpha_score) + (0.3 * full_score)
+            # SECONDARY: full string similarity
+            score = fuzz.ratio(src_clean, f["clean"])
+
+            # PRIORITY: favor alphabet similarity
+            final_score = (0.7 * alpha_score) + (0.3 * score)
 
             if final_score > best_score:
                 best_score = final_score
@@ -111,35 +120,24 @@ def scan_files(zip_file, sources):
             flag = "NO"
             best = None
 
+        # -------- OUTPUT --------
         if best:
             matched = best["original"]
             unmatched = "-"
             diff = get_difference(src_clean, best["clean"])
         else:
             matched = "-"
-            unmatched = src  # EXACT user input shown
-            diff = src
+            unmatched = src_clean
+            diff = src_clean  # full difference
 
         results.append([
-            src,   # 🔥 EXACT USER INPUT PRESERVED
+            src_clean,
             flag,
             match_type,
             matched,
             unmatched,
             diff
         ])
-
-    # -------- ADD UNMAPPED FILES --------
-    for f in files:
-        if not f["used"]:
-            results.append([
-                "-",                  # no source
-                "NO",
-                "Unmapped File",
-                "-",
-                f["original"],       # file not matched to any source
-                f["original"]
-            ])
 
     return results
 
@@ -148,7 +146,7 @@ if st.button("🚀 Run Scan"):
     if not uploaded_zip or not source_input:
         st.warning("Upload ZIP and enter source names")
     else:
-        sources = [s for s in source_input.split("\n") if s.strip()]
+        sources = [s.strip() for s in source_input.split("\n") if s.strip()]
 
         data = scan_files(uploaded_zip, sources)
 
