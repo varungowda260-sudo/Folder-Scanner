@@ -72,18 +72,19 @@ def load_files(zip_file, uploaded_files):
 
     return files
 
-# ---------------- DIFFERENCE ----------------
+# ---------------- DIFFERENCE (FIXED) ----------------
 def get_difference(src, tgt):
-    src_parts = split_parts(src)
-    tgt_parts = split_parts(tgt)
+    src_clean = clean_name(src)
+    tgt_full = tgt  # keep extension
 
-    diffs = []
+    tgt_name = os.path.splitext(tgt_full)[0]
 
-    for i in range(min(len(src_parts), len(tgt_parts))):
-        if src_parts[i] != tgt_parts[i]:
-            diffs.append(f"{src_parts[i]} ≠ {tgt_parts[i]}")
+    if tgt_name.startswith(src_clean):
+        suffix = tgt_name[len(src_clean):]
+        ext = os.path.splitext(tgt_full)[1]
+        return (suffix + ext) if (suffix + ext) else "-"
 
-    return ", ".join(diffs) if diffs else "-"
+    return tgt_full  # fallback
 
 # ---------------- MATCH LOGIC ----------------
 def match_file(src, files):
@@ -108,7 +109,7 @@ def match_file(src, files):
             best_score = match_count
             best_match = f
 
-    # -------- CLASSIFICATION (FINAL RULE) --------
+    # -------- CLASSIFICATION --------
     if best_score >= 4:
         return ["YES", "Exact", best_match, "-", "-"]
 
@@ -120,7 +121,7 @@ def match_file(src, files):
         diff = get_difference(src, best_match)
         return ["YES", "Partial", best_match, "-", diff]
 
-    else:  # includes 1 and 0
+    else:
         return ["NO", "Not Matched", "-", src, src]
 
 # ---------------- RUN ----------------
