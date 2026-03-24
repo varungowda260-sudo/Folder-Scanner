@@ -1,125 +1,121 @@
 import streamlit as st
+import zipfile
+import tempfile
 import os
 import re
 import pandas as pd
-from collections import defaultdict
 
-st.set_page_config(page_title="Enterprise File Scanner Pro", layout="wide")
+st.set_page_config(page_title="Folder Scanner", layout="wide")
 
-# ---------------- UI ----------------
-st.markdown("""
-<style>
-.title {font-size:42px;font-weight:800;text-align:center;margin-bottom:20px;}
-.section {font-size:22px;font-weight:700;margin-top:20px;}
-.dataframe th {font-size:20px !important;font-weight:800 !important;}
-.dataframe td {font-size:16px !important;}
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown('<div class="title">📂 Enterprise File Scanner PRO</div>', unsafe_allow_html=True)
+st.title("📂 Folder Scanner")
 
 # ---------------- INPUT ----------------
-st.markdown('<div class="section">Source File Name(CCF,VSR,CSIR)</div>', unsafe_allow_html=True)
-source_input = st.text_area("", height=180)
+st.subheader("Source File Name(CCF,VSR,CSIR)")
+source_input = st.text_area("", height=200)
 
-st.markdown('<div class="section">Folder Path (Required for Rename)</div>', unsafe_allow_html=True)
-folder_path = st.text_input("Enter full folder path")
+st.subheader("Upload Folder / ZIP")
+uploaded_zip = st.file_uploader("Upload ZIP", type=["zip"])
+uploaded_files = st.file_uploader("Or Upload Files", accept_multiple_files=True)
 
-# ---------------- NORMALIZATION ----------------
-def normalize(text):
-    return text.strip().upper()
-
+# ---------------- CLEAN ----------------
 def clean_name(name):
     name = os.path.splitext(name)[0]
-    name = re.sub(r'[\s_\-\.]*v\d+$', '', name, flags=re.IGNORECASE)
-    return normalize(name)
 
+    # ONLY remove version suffix
+    name = re.sub(r'[\s_\-\.]*v\d+$', '', name, flags=re.IGNORECASE)
+
+    return name.strip()
+
+# ---------------- SPLIT ----------------
 def split_parts(name):
     return clean_name(name).split("-")
 
-# ---------------- LOAD FILES ----------------
-def load_files(path):
+# ---------------- LOAD ----------------
+def load_files(zip_file, uploaded_files):
     files = []
-    for root, _, f in os.walk(path):
-        for file in f:
-            files.append(file)
-    return list(set(files))
+    temp_dir = tempfile.mkdtemp()
 
-# ---------------- INDEX ----------------
-def build_index(files):
-    index = defaultdict(list)
-    for f in files:
-        parts = split_parts(f)
-        if len(parts) >= 3:
-            key = tuple(parts[:3])
-            index[key].append(f)
-    return index
+    if zip_file:
+        with zipfile.ZipFile(zip_file, 'r') as z:
+            z.extractall(temp_dir)
 
-# ---------------- SUGGEST FIX ----------------
-def suggest_fix(src, candidates):
-    src_parts = split_parts(src)
+        for root, _, f in os.walk(temp_dir):
+            for file in f:
+                files.append(file)
 
-    if not candidates:
-        return None
+    if uploaded_files:
+        for f in uploaded_files:
+            files.append(f.name)
 
-    best = candidates[0]
-    tgt_parts = split_parts(best)
-
-    # Construct corrected name
-    corrected = "-".join(src_parts[:3])
-
-    if len(tgt_parts) > 3:
-        corrected += "-" + tgt_parts[3]
-
-    return corrected
+    return files  # IMPORTANT: no set(), no modification
 
 # ---------------- MATCH ----------------
-def match(src, index):
+def match_file(src, files):
+    src = src.strip()
     src_parts = split_parts(src)
 
     if len(src_parts) < 3:
-        return ["NO", "Not Matched", "-", src, None, "Invalid format"]
+        return ["NO", "Not Matched", "-", src, src]
 
-    key = tuple(src_parts[:3])
+    exact_match = None
+    close_matches = []
 
-    if key not in index:
-        return ["NO", "Not Matched", "-", src, None, "No prefix match"]
+    for f in files:
+        tgt_parts = split_parts(f)
 
-    candidates = index[key]
+        if len(tgt_parts) < 3:
+            continue
 
-    for f in candidates:
-        if split_parts(f) == src_parts:
-            return ["YES", "Exact", f, "-", None, "Perfect match"]
+        # STRICT FIRST 3 MATCH
+        if (
+            src_parts[0] == tgt_parts[0] and
+            src_parts[1] == tgt_parts[1] and
+            src_parts[2] == tgt_parts[2]
+        ):
 
-    # Close match
-    fix = suggest_fix(src, candidates)
+            # 4th part
+            if len(src_parts) > 3 and len(tgt_parts) > 3:
+                if src_parts[3] == tgt_parts[3]:
+                    exact_match = f
+                    break
+                else:
+                    close_matches.append(f)
+            else:
+                close_matches.append(f)
 
-    return [
-        "YES",
-        "Close",
-        ", ".join(candidates[:3]),
-        "-",
-        fix,
-        "Prefix matched, suggested correction available"
-    ]
+    if exact_match:
+        return ["YES", "Exact", exact_match, "-", "-"]
+
+    if close_matches:
+        return ["YES", "Close", ", ".join(close_matches[:3]), "-", "-"]
+
+    return ["NO", "Not Matched", "-", src, src]
 
 # ---------------- RUN ----------------
 if st.button("🚀 Run Scan"):
 
-    if not source_input or not folder_path:
-        st.warning("Provide source names and folder path")
+    if not source_input:
+        st.warning("Enter source names")
         st.stop()
 
-    files = load_files(folder_path)
-    index = build_index(files)
+    files = load_files(uploaded_zip, uploaded_files)
+
+    if not files:
+        st.warning("Upload ZIP or files")
+        st.stop()
 
     sources = [s.strip() for s in source_input.split("\n") if s.strip()]
 
+    # -------- PROGRESS --------
+    progress = st.progress(0)
+    total = len(sources)
+
     results = []
 
-    for src in sources:
-        res = match(src, index)
+    for i, src in enumerate(sources):
+        res = match_file(src, files)
         results.append([src] + res)
+        progress.progress((i + 1) / total)
 
     df = pd.DataFrame(results, columns=[
         "Source File Name",
@@ -127,45 +123,22 @@ if st.button("🚀 Run Scan"):
         "Match Type",
         "Matched Files",
         "Unmatched Files",
-        "Suggested Fix",
-        "Debug"
+        "Difference"
     ])
+
+    st.success("Scan Completed")
+
+    # -------- SUMMARY --------
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total", len(df))
+    col2.metric("Matched", len(df[df["YES/NO"] == "YES"]))
+    col3.metric("Unmatched", len(df[df["YES/NO"] == "NO"]))
 
     st.dataframe(df, use_container_width=True)
 
-    # ---------------- BULK RENAME ----------------
-    st.markdown("### ✏️ Bulk Rename Tool")
-
-    rename_candidates = df[df["Suggested Fix"].notna()]
-
-    if not rename_candidates.empty:
-        st.warning(f"{len(rename_candidates)} files can be corrected")
-
-        if st.button("⚡ Apply Safe Rename"):
-
-            log = []
-
-            for _, row in rename_candidates.iterrows():
-                old_name = row["Matched Files"].split(",")[0]
-                new_name = row["Suggested Fix"] + ".pdf"
-
-                old_path = os.path.join(folder_path, old_name)
-                new_path = os.path.join(folder_path, new_name)
-
-                if os.path.exists(old_path) and not os.path.exists(new_path):
-                    os.rename(old_path, new_path)
-                    log.append(f"{old_name} → {new_name}")
-
-            st.success("Rename completed safely")
-
-            st.text("\n".join(log))
-
-    else:
-        st.success("No files need correction")
-
-    # Export
-    file = "Enterprise_Report.xlsx"
-    df.to_excel(file, index=False)
-
-    with open(file, "rb") as f:
-        st.download_button("📥 Download Report", f, file_name=file)
+    # -------- EXPORT --------
+    st.download_button(
+        "📥 Download Report",
+        df.to_csv(index=False),
+        file_name="scan_report.csv"
+    )
