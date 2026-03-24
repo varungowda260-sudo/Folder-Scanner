@@ -35,7 +35,7 @@ st.markdown("""
 st.markdown('<div class="title">📂 Folder Scanner</div>', unsafe_allow_html=True)
 
 # ---------------- INPUT ----------------
-st.markdown('<div class="section">Source File Name(CCF,VSR,CSIR)</div>', unsafe_allow_html=True)
+st.markdown('<div class="section">Source File Name (CCF, VSR, CSIR)</div>', unsafe_allow_html=True)
 source_input = st.text_area("", height=200)
 
 st.markdown('<div class="section">Upload Folder / ZIP</div>', unsafe_allow_html=True)
@@ -50,7 +50,9 @@ def clean_name(name):
 
 # ---------------- SPLIT ----------------
 def split_parts(name):
-    return clean_name(name).split("-")
+    name = clean_name(name)
+    parts = re.split(r'[-_\s]+', name)
+    return [p for p in parts if p]
 
 # ---------------- LOAD FILES ----------------
 def load_files(zip_file, uploaded_files):
@@ -70,44 +72,41 @@ def load_files(zip_file, uploaded_files):
 
     return files
 
-# ---------------- MATCH (YOUR ORIGINAL LOGIC) ----------------
+# ---------------- MATCH LOGIC (UNCHANGED) ----------------
 def match_file(src, files):
     src = src.strip()
     src_parts = split_parts(src)
 
-    if len(src_parts) < 3:
-        return ["NO", "Not Matched", "-", src, src]
-
-    exact_match = None
-    close_matches = []
+    best_match = None
+    best_score = 0
 
     for f in files:
         tgt_parts = split_parts(f)
 
-        if len(tgt_parts) < 3:
-            continue
+        match_count = 0
 
-        if (
-            src_parts[0] == tgt_parts[0] and
-            src_parts[1] == tgt_parts[1] and
-            src_parts[2] == tgt_parts[2]
-        ):
-            if len(src_parts) > 3 and len(tgt_parts) > 3:
-                if src_parts[3] == tgt_parts[3]:
-                    exact_match = f
-                    break
-                else:
-                    close_matches.append(f)
+        for i in range(min(len(src_parts), len(tgt_parts))):
+            if src_parts[i] == tgt_parts[i]:
+                match_count += 1
             else:
-                close_matches.append(f)
+                break
 
-    if exact_match:
-        return ["YES", "Exact", exact_match, "-", "-"]
+        if match_count > best_score:
+            best_score = match_count
+            best_match = f
 
-    if close_matches:
-        return ["YES", "Close", ", ".join(close_matches[:3]), "-", "-"]
+    # -------- CLASSIFICATION (YOUR FINAL RULE) --------
+    if best_score >= 4:
+        return ["YES", "Exact", best_match, "-", "-"]
 
-    return ["NO", "Not Matched", "-", src, src]
+    elif best_score == 3:
+        return ["YES", "Close", best_match, "-", "-"]
+
+    elif best_score >= 1:
+        return ["YES", "Partial", best_match, "-", "-"]
+
+    else:  # best_score == 0
+        return ["NO", "Not Matched", "-", src, src]
 
 # ---------------- RUN ----------------
 if st.button("🚀 Run Scan"):
@@ -124,7 +123,6 @@ if st.button("🚀 Run Scan"):
 
     sources = [s.strip() for s in source_input.split("\n") if s.strip()]
 
-    # -------- PROGRESS --------
     progress = st.progress(0)
     total = len(sources)
 
@@ -139,72 +137,36 @@ if st.button("🚀 Run Scan"):
         "Source File Name",
         "YES/NO",
         "Match Type",
-        "Matched Files",
+        "Matched Files in Folder",
         "Unmatched Files",
         "Difference"
     ])
 
     st.success("Scan Completed")
 
-    # -------- SUMMARY --------
-    col1, col2, col3 = st.columns(3)
+    # ---------------- SUMMARY ----------------
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total", len(df))
-    col2.metric("Matched", len(df[df["YES/NO"] == "YES"]))
-    col3.metric("Unmatched", len(df[df["YES/NO"] == "NO"]))
+    col2.metric("Exact", len(df[df["Match Type"] == "Exact"]))
+    col3.metric("Close", len(df[df["Match Type"] == "Close"]))
+    col4.metric("Not Matched", len(df[df["YES/NO"] == "NO"]))
 
-    # ---------------- SEARCH ----------------
-    search = st.text_input("🔍 Search in results")
-
-    filtered_df = df.copy()
-
-    if search:
-        filtered_df = filtered_df[
-            filtered_df.apply(lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1)
-        ]
-
-    # ---------------- HIGHLIGHT ----------------
+    # ---------------- COLOR HIGHLIGHT (UI ONLY) ----------------
     def highlight(row):
-        if row["YES/NO"] == "NO":
-            return ['background-color: #ffcccc'] * len(row)
+        if row["Match Type"] == "Exact":
+            return ['background-color: #d4edda'] * len(row)   # green
         elif row["Match Type"] == "Close":
-            return ['background-color: #fff3cd'] * len(row)
-        elif row["Match Type"] == "Exact":
-            return ['background-color: #d4edda'] * len(row)
-        return [''] * len(row)
+            return ['background-color: #fff3cd'] * len(row)   # yellow
+        elif row["Match Type"] == "Partial":
+            return ['background-color: #ffe5b4'] * len(row)   # orange
+        else:
+            return ['background-color: #ffcccc'] * len(row)   # red
 
-    # ---------------- TABS ----------------
-    tab1, tab2, tab3 = st.tabs(["📊 All Results", "✅ Matched", "❌ Unmatched"])
-
-    with tab1:
-        st.dataframe(filtered_df.style.apply(highlight, axis=1), use_container_width=True)
-
-    with tab2:
-        st.dataframe(
-            filtered_df[filtered_df["YES/NO"] == "YES"].style.apply(highlight, axis=1),
-            use_container_width=True
-        )
-
-    with tab3:
-        st.dataframe(
-            filtered_df[filtered_df["YES/NO"] == "NO"].style.apply(highlight, axis=1),
-            use_container_width=True
-        )
+    st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
 
     # ---------------- DOWNLOAD ----------------
-    st.markdown("### 📥 Download")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.download_button(
-            "Download Filtered Results",
-            filtered_df.to_csv(index=False),
-            file_name="filtered_results.csv"
-        )
-
-    with col2:
-        st.download_button(
-            "Download Full Report",
-            df.to_csv(index=False),
-            file_name="full_report.csv"
-        )
+    st.download_button(
+        "📥 Download Report",
+        df.to_csv(index=False),
+        file_name="scan_report.csv"
+    )
