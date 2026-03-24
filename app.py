@@ -7,13 +7,38 @@ import pandas as pd
 
 st.set_page_config(page_title="Folder Scanner", layout="wide")
 
-# ---------------- UI ----------------
-st.title("📂 Folder Scanner")
+# ---------------- UI STYLE ----------------
+st.markdown("""
+<style>
+.title {
+    font-size:38px;
+    font-weight:800;
+    text-align:center;
+    margin-bottom:20px;
+}
+.section {
+    font-size:22px;
+    font-weight:700;
+    margin-top:20px;
+}
+.dataframe th {
+    font-size:18px !important;
+    font-weight:800 !important;
+    text-align:center !important;
+}
+.dataframe td {
+    font-size:16px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-st.subheader("Source File Name (CCF, VSR, CSIR)")
+st.markdown('<div class="title">📂 Folder Scanner</div>', unsafe_allow_html=True)
+
+# ---------------- INPUT ----------------
+st.markdown('<div class="section">Source File Name (CCF, VSR, CSIR)</div>', unsafe_allow_html=True)
 source_input = st.text_area("", height=200)
 
-st.subheader("Upload Folder / ZIP")
+st.markdown('<div class="section">Upload Folder / ZIP</div>', unsafe_allow_html=True)
 uploaded_zip = st.file_uploader("Upload ZIP", type=["zip"])
 uploaded_files = st.file_uploader("Or Upload Files", accept_multiple_files=True)
 
@@ -26,9 +51,10 @@ def clean_name(name):
 # ---------------- SPLIT ----------------
 def split_parts(name):
     name = clean_name(name)
-    return [p for p in re.split(r'[-_\s]+', name) if p]
+    parts = re.split(r'[-_\s]+', name)
+    return [p for p in parts if p]
 
-# ---------------- LOAD ----------------
+# ---------------- LOAD FILES ----------------
 def load_files(zip_file, uploaded_files):
     files = []
     temp_dir = tempfile.mkdtemp()
@@ -46,30 +72,47 @@ def load_files(zip_file, uploaded_files):
 
     return files
 
-# ---------------- DIFFERENCE (FINAL FIX) ----------------
+# ---------------- DIFFERENCE (FIXED ONLY) ----------------
 def get_difference(src, tgt):
     src_clean = clean_name(src)
     tgt_full = tgt
     tgt_clean = clean_name(tgt_full)
     ext = os.path.splitext(tgt_full)[1]
 
-    # Case 1: exact base match → only extension
+    # Exact base match → only extension
     if src_clean == tgt_clean:
         return ext if ext else "-"
 
-    # Case 2: target starts with source → extract suffix
-    if tgt_clean.startswith(src_clean):
-        suffix = tgt_clean[len(src_clean):]
+    # Normalize for comparison (ignore separators)
+    src_norm = re.sub(r'[-_\s]+', '', src_clean)
+    tgt_norm = re.sub(r'[-_\s]+', '', tgt_clean)
+
+    # If prefix matches → extract clean suffix
+    if tgt_norm.startswith(src_norm):
+        # find position in original cleaned string safely
+        i = 0
+        j = 0
+        while i < len(src_clean) and j < len(tgt_clean):
+            if src_clean[i] == tgt_clean[j]:
+                i += 1
+                j += 1
+            else:
+                j += 1
+        suffix = tgt_clean[j:]
         return suffix + ext if (suffix + ext) else ext
 
-    # Case 3: fallback (safe)
-    return tgt_full
+    # Fallback → find best aligned prefix
+    for i in range(len(src_clean), 0, -1):
+        if tgt_clean.startswith(src_clean[:i]):
+            suffix = tgt_clean[i:]
+            return suffix + ext if (suffix + ext) else ext
 
-# ---------------- MATCH ----------------
+    return ext if ext else "-"
+
+# ---------------- MATCH LOGIC ----------------
 def match_file(src, files):
     src = src.strip()
     src_parts = split_parts(src)
-    src_clean = clean_name(src)
 
     best_match = None
     best_score = 0
@@ -89,13 +132,8 @@ def match_file(src, files):
             best_score = match_count
             best_match = f
 
-    if not best_match:
-        return ["NO", "Not Matched", "-", src, src]
-
-    tgt_clean = clean_name(best_match)
-
-    # -------- STRICT EXACT --------
-    if src_clean == tgt_clean:
+    # -------- CLASSIFICATION --------
+    if best_score >= 4:
         return ["YES", "Exact", best_match, "-", "-"]
 
     elif best_score == 3:
@@ -113,23 +151,26 @@ def match_file(src, files):
 if st.button("🚀 Run Scan"):
 
     if not source_input:
-        st.warning("Enter source names")
+        st.warning("Enter source file names")
         st.stop()
 
     files = load_files(uploaded_zip, uploaded_files)
 
     if not files:
-        st.warning("Upload files")
+        st.warning("Upload ZIP or files")
         st.stop()
 
     sources = [s.strip() for s in source_input.split("\n") if s.strip()]
 
-    results = []
     progress = st.progress(0)
+    total = len(sources)
+
+    results = []
 
     for i, src in enumerate(sources):
-        results.append([src] + match_file(src, files))
-        progress.progress((i + 1) / len(sources))
+        res = match_file(src, files)
+        results.append([src] + res)
+        progress.progress((i + 1) / total)
 
     df = pd.DataFrame(results, columns=[
         "Source File Name",
@@ -142,8 +183,27 @@ if st.button("🚀 Run Scan"):
 
     st.success("Scan Completed")
 
-    st.dataframe(df, use_container_width=True)
+    # ---------------- SUMMARY ----------------
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total", len(df))
+    col2.metric("Exact", len(df[df["Match Type"] == "Exact"]))
+    col3.metric("Close", len(df[df["Match Type"] == "Close"]))
+    col4.metric("Not Matched", len(df[df["YES/NO"] == "NO"]))
 
+    # ---------------- COLOR ----------------
+    def highlight(row):
+        if row["Match Type"] == "Exact":
+            return ['background-color: #d4edda'] * len(row)
+        elif row["Match Type"] == "Close":
+            return ['background-color: #fff3cd'] * len(row)
+        elif row["Match Type"] == "Partial":
+            return ['background-color: #ffe5b4'] * len(row)
+        else:
+            return ['background-color: #ffcccc'] * len(row)
+
+    st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
+
+    # ---------------- DOWNLOAD ----------------
     st.download_button(
         "📥 Download Report",
         df.to_csv(index=False),
