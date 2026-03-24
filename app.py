@@ -71,6 +71,38 @@ def load_files(zip_file, uploaded_files):
             files.append(f.name)
 
     return files
+
+# ---------------- DIFFERENCE (FIXED ONLY) ----------------
+def get_difference(src, tgt):
+    src_clean = clean_name(src)
+    tgt_full = tgt
+
+    tgt_clean = clean_name(tgt_full)
+    ext = os.path.splitext(tgt_full)[1]
+
+    # Case 1: exact base name match → only extension
+    if src_clean == tgt_clean:
+        return ext if ext else "-"
+
+    # Case 2: try normalized prefix match (ignore separators)
+    src_norm = re.sub(r'[-_\s]+', '', src_clean)
+    tgt_norm = re.sub(r'[-_\s]+', '', tgt_clean)
+
+    if tgt_norm.startswith(src_norm):
+        # find real index in original cleaned string
+        idx = len(src_clean)
+        suffix = tgt_clean[idx:]
+
+        return suffix + ext if (suffix + ext) else ext
+
+    # Case 3: fallback → return only suffix after best aligned prefix
+    for i in range(len(src_clean)):
+        if tgt_clean.startswith(src_clean[:len(src_clean)-i]):
+            suffix = tgt_clean[len(src_clean)-i:]
+            return suffix + ext
+
+    # final fallback
+    return ext if ext else "-"
     
 # ---------------- MATCH LOGIC ----------------
 def match_file(src, files):
@@ -100,10 +132,12 @@ def match_file(src, files):
         return ["YES", "Exact", best_match, "-", "-"]
 
     elif best_score == 3:
-        return ["YES", "Close", best_match, "-",]
+        diff = get_difference(src, best_match)
+        return ["YES", "Close", best_match, "-", diff]
 
     elif best_score == 2:
-        return ["YES", "Partial", best_match, "-", ]
+        diff = get_difference(src, best_match)
+        return ["YES", "Partial", best_match, "-", diff]
 
     else:
         return ["NO", "Not Matched", "-", src, src]
@@ -139,6 +173,7 @@ if st.button("🚀 Run Scan"):
         "Match Type",
         "Matched Files in Folder",
         "Unmatched Files",
+        "Difference"
     ])
 
     st.success("Scan Completed")
