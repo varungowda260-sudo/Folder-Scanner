@@ -100,12 +100,10 @@ def match_file(src, files):
         return ["YES", "Exact", best_match, "-", "-"]
 
     elif best_score == 3:
-        diff = get_difference(src, best_match)
-        return ["YES", "Close", best_match, "-", diff]
+        return ["YES", "Close", best_match, "-",]
 
     elif best_score == 2:
-        diff = get_difference(src, best_match)
-        return ["YES", "Partial", best_match, "-", diff]
+        return ["YES", "Partial", best_match, "-", ]
 
     else:
         return ["NO", "Not Matched", "-", src, src]
@@ -141,7 +139,6 @@ if st.button("🚀 Run Scan"):
         "Match Type",
         "Matched Files in Folder",
         "Unmatched Files",
-        "Difference"
     ])
 
     st.success("Scan Completed")
