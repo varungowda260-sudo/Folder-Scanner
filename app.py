@@ -71,24 +71,6 @@ def load_files(zip_file, uploaded_files):
             files.append(f.name)
 
     return files
-
-# ---------------- DIFFERENCE (FIXED ONLY) ----------------
-def get_difference(src, tgt):
-    src_parts = split_parts(src)
-    tgt_parts = split_parts(tgt)
-
-    diffs = []
-
-    for i in range(min(len(src_parts), len(tgt_parts))):
-        if src_parts[i] != tgt_parts[i]:
-            diffs.append(f"{src_parts[i]} ≠ {tgt_parts[i]}")
-
-    # if target has extra parts (like V03, Run01 etc.)
-    if len(tgt_parts) > len(src_parts):
-        extra = tgt_parts[len(src_parts):]
-        diffs.append("≠ " + "_".join(extra))
-
-    return ", ".join(diffs) if diffs else "-"
     
 # ---------------- MATCH LOGIC ----------------
 def match_file(src, files):
