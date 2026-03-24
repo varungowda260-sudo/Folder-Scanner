@@ -72,7 +72,20 @@ def load_files(zip_file, uploaded_files):
 
     return files
 
-# ---------------- MATCH LOGIC (UNCHANGED) ----------------
+# ---------------- DIFFERENCE ----------------
+def get_difference(src, tgt):
+    src_parts = split_parts(src)
+    tgt_parts = split_parts(tgt)
+
+    diffs = []
+
+    for i in range(min(len(src_parts), len(tgt_parts))):
+        if src_parts[i] != tgt_parts[i]:
+            diffs.append(f"{src_parts[i]} ≠ {tgt_parts[i]}")
+
+    return ", ".join(diffs) if diffs else "-"
+
+# ---------------- MATCH LOGIC ----------------
 def match_file(src, files):
     src = src.strip()
     src_parts = split_parts(src)
@@ -95,17 +108,19 @@ def match_file(src, files):
             best_score = match_count
             best_match = f
 
-    # -------- CLASSIFICATION (YOUR FINAL RULE) --------
+    # -------- CLASSIFICATION (FINAL RULE) --------
     if best_score >= 4:
         return ["YES", "Exact", best_match, "-", "-"]
 
     elif best_score == 3:
-        return ["YES", "Close", best_match, "-", "-"]
+        diff = get_difference(src, best_match)
+        return ["YES", "Close", best_match, "-", diff]
 
-    elif best_score >= 1:
-        return ["YES", "Partial", best_match, "-", "-"]
+    elif best_score == 2:
+        diff = get_difference(src, best_match)
+        return ["YES", "Partial", best_match, "-", diff]
 
-    else:  # best_score == 0
+    else:  # includes 1 and 0
         return ["NO", "Not Matched", "-", src, src]
 
 # ---------------- RUN ----------------
@@ -151,16 +166,16 @@ if st.button("🚀 Run Scan"):
     col3.metric("Close", len(df[df["Match Type"] == "Close"]))
     col4.metric("Not Matched", len(df[df["YES/NO"] == "NO"]))
 
-    # ---------------- COLOR HIGHLIGHT (UI ONLY) ----------------
+    # ---------------- COLOR ----------------
     def highlight(row):
         if row["Match Type"] == "Exact":
-            return ['background-color: #d4edda'] * len(row)   # green
+            return ['background-color: #d4edda'] * len(row)
         elif row["Match Type"] == "Close":
-            return ['background-color: #fff3cd'] * len(row)   # yellow
+            return ['background-color: #fff3cd'] * len(row)
         elif row["Match Type"] == "Partial":
-            return ['background-color: #ffe5b4'] * len(row)   # orange
+            return ['background-color: #ffe5b4'] * len(row)
         else:
-            return ['background-color: #ffcccc'] * len(row)   # red
+            return ['background-color: #ffcccc'] * len(row)
 
     st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
 
