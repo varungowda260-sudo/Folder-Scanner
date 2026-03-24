@@ -79,17 +79,16 @@ def get_difference(src, tgt):
     tgt_clean = clean_name(tgt_full)
     ext = os.path.splitext(tgt_full)[1]
 
-    # Exact base match → only extension
+    # Case 1: exact base match → only extension
     if src_clean == tgt_clean:
         return ext if ext else "-"
 
-    # Normalize for comparison (ignore separators)
+    # Normalize (ignore separators)
     src_norm = re.sub(r'[-_\s]+', '', src_clean)
     tgt_norm = re.sub(r'[-_\s]+', '', tgt_clean)
 
-    # If prefix matches → extract clean suffix
+    # Case 2: prefix match → extract suffix properly
     if tgt_norm.startswith(src_norm):
-        # find position in original cleaned string safely
         i = 0
         j = 0
         while i < len(src_clean) and j < len(tgt_clean):
@@ -101,7 +100,7 @@ def get_difference(src, tgt):
         suffix = tgt_clean[j:]
         return suffix + ext if (suffix + ext) else ext
 
-    # Fallback → find best aligned prefix
+    # Case 3: fallback → best prefix alignment
     for i in range(len(src_clean), 0, -1):
         if tgt_clean.startswith(src_clean[:i]):
             suffix = tgt_clean[i:]
