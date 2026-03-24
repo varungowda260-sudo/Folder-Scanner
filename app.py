@@ -76,38 +76,34 @@ def load_files(zip_file, uploaded_files):
 def get_difference(src, tgt):
     src_clean = clean_name(src)
     tgt_full = tgt
+
     tgt_clean = clean_name(tgt_full)
     ext = os.path.splitext(tgt_full)[1]
 
-    # Case 1: exact base match → only extension
+    # Case 1: exact base name match → only extension
     if src_clean == tgt_clean:
         return ext if ext else "-"
 
-    # Normalize (ignore separators)
+    # Case 2: try normalized prefix match (ignore separators)
     src_norm = re.sub(r'[-_\s]+', '', src_clean)
     tgt_norm = re.sub(r'[-_\s]+', '', tgt_clean)
 
-    # Case 2: prefix match → extract suffix properly
     if tgt_norm.startswith(src_norm):
-        i = 0
-        j = 0
-        while i < len(src_clean) and j < len(tgt_clean):
-            if src_clean[i] == tgt_clean[j]:
-                i += 1
-                j += 1
-            else:
-                j += 1
-        suffix = tgt_clean[j:]
+        # find real index in original cleaned string
+        idx = len(src_clean)
+        suffix = tgt_clean[idx:]
+
         return suffix + ext if (suffix + ext) else ext
 
-    # Case 3: fallback → best prefix alignment
-    for i in range(len(src_clean), 0, -1):
-        if tgt_clean.startswith(src_clean[:i]):
-            suffix = tgt_clean[i:]
-            return suffix + ext if (suffix + ext) else ext
+    # Case 3: fallback → return only suffix after best aligned prefix
+    for i in range(len(src_clean)):
+        if tgt_clean.startswith(src_clean[:len(src_clean)-i]):
+            suffix = tgt_clean[len(src_clean)-i:]
+            return suffix + ext
 
+    # final fallback
     return ext if ext else "-"
-
+    
 # ---------------- MATCH LOGIC ----------------
 def match_file(src, files):
     src = src.strip()
