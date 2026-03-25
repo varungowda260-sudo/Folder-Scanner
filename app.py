@@ -141,7 +141,7 @@ def match_file(src, files):
    if best_score >= 4:
         return ["YES", "Exact", best_match, "-", "-"]
 
-    elif best_score == 3:
+   elif best_score == 3:
         diff = get_difference(src, best_match)
         return ["YES", "Close", best_match, "-", diff]
 
@@ -149,11 +149,11 @@ def match_file(src, files):
     diff = get_difference(src, best_match)
     return ["YES", "Partial", best_match, "-", diff]
 
-elif best_score == 1:
+   elif best_score == 1:
     diff = get_difference(src, best_match)
     return ["YES", "Partial", best_match, "-", diff]
 
-else:
+   else:
     return ["NO", "Not Matched", "-", src, src]
 
 # ---------------- RUN ----------------
