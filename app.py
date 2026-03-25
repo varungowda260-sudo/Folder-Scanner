@@ -48,10 +48,20 @@ def clean_name(name):
     name = re.sub(r'[\s_\-\.]*v\d+$', '', name, flags=re.IGNORECASE)
     return name.strip()
 
-# ---------------- SPLIT ----------------
+# ---------------- NEW: VERSION EXTRACT ----------------
+def extract_version(name):
+    match = re.search(r'v\d+', name, re.IGNORECASE)
+    return match.group().lower() if match else None
+
+# ---------------- SPLIT (ENHANCED ONLY) ----------------
 def split_parts(name):
     name = clean_name(name)
-    parts = re.split(r'[-_\s]+', name)
+
+    # Normalize ALL special characters
+    name = re.sub(r'[^\w]+', ' ', name)
+
+    parts = name.split()
+
     return [p for p in parts if p]
 
 # ---------------- LOAD FILES ----------------
@@ -72,7 +82,7 @@ def load_files(zip_file, uploaded_files):
 
     return files
 
-# ---------------- DIFFERENCE (FIXED ONLY) ----------------
+# ---------------- DIFFERENCE (UNCHANGED) ----------------
 def get_difference(src, tgt):
     src_clean = clean_name(src)
     tgt_full = tgt
@@ -80,40 +90,36 @@ def get_difference(src, tgt):
     tgt_clean = clean_name(tgt_full)
     ext = os.path.splitext(tgt_full)[1]
 
-    # Case 1: exact base name match → only extension
     if src_clean == tgt_clean:
         return ext if ext else "-"
 
-    # Case 2: try normalized prefix match (ignore separators)
     src_norm = re.sub(r'[-_\s]+', '', src_clean)
     tgt_norm = re.sub(r'[-_\s]+', '', tgt_clean)
 
     if tgt_norm.startswith(src_norm):
-        # find real index in original cleaned string
         idx = len(src_clean)
         suffix = tgt_clean[idx:]
-
         return suffix + ext if (suffix + ext) else ext
 
-    # Case 3: fallback → return only suffix after best aligned prefix
     for i in range(len(src_clean)):
         if tgt_clean.startswith(src_clean[:len(src_clean)-i]):
             suffix = tgt_clean[len(src_clean)-i:]
             return suffix + ext
 
-    # final fallback
     return ext if ext else "-"
-    
+
 # ---------------- MATCH LOGIC ----------------
 def match_file(src, files):
     src = src.strip()
     src_parts = split_parts(src)
+    src_version = extract_version(src)
 
     best_match = None
     best_score = 0
 
     for f in files:
         tgt_parts = split_parts(f)
+        tgt_version = extract_version(f)
 
         match_count = 0
 
@@ -123,24 +129,32 @@ def match_file(src, files):
             else:
                 break
 
+        # VERSION-AWARE BOOST (SAFE ADDITION)
+        if src_version and tgt_version and src_version == tgt_version:
+            match_count += 1
+
         if match_count > best_score:
             best_score = match_count
             best_match = f
 
-    # -------- CLASSIFICATION --------
-    if best_score >= 4:
+    # -------- CLASSIFICATION (MINIMAL EXTENSION) --------
+   if best_score >= 4:
         return ["YES", "Exact", best_match, "-", "-"]
 
     elif best_score == 3:
         diff = get_difference(src, best_match)
         return ["YES", "Close", best_match, "-", diff]
 
-    elif best_score == 2:
-        diff = get_difference(src, best_match)
-        return ["YES", "Partial", best_match, "-", diff]
+   elif best_score == 2:
+    diff = get_difference(src, best_match)
+    return ["YES", "Partial", best_match, "-", diff]
 
-    else:
-        return ["NO", "Not Matched", "-", src, src]
+elif best_score == 1:
+    diff = get_difference(src, best_match)
+    return ["YES", "Partial", best_match, "-", diff]
+
+else:
+    return ["NO", "Not Matched", "-", src, src]
 
 # ---------------- RUN ----------------
 if st.button("🚀 Run Scan"):
@@ -178,14 +192,12 @@ if st.button("🚀 Run Scan"):
 
     st.success("Scan Completed")
 
-    # ---------------- SUMMARY ----------------
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total", len(df))
     col2.metric("Exact", len(df[df["Match Type"] == "Exact"]))
     col3.metric("Close", len(df[df["Match Type"] == "Close"]))
     col4.metric("Not Matched", len(df[df["YES/NO"] == "NO"]))
 
-    # ---------------- COLOR ----------------
     def highlight(row):
         if row["Match Type"] == "Exact":
             return ['background-color: #d4edda'] * len(row)
@@ -198,7 +210,6 @@ if st.button("🚀 Run Scan"):
 
     st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
 
-    # ---------------- DOWNLOAD ----------------
     st.download_button(
         "📥 Download Report",
         df.to_csv(index=False),
