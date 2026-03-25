@@ -53,15 +53,11 @@ def extract_version(name):
     match = re.search(r'v\d+', name, re.IGNORECASE)
     return match.group().lower() if match else None
 
-# ---------------- SPLIT (ENHANCED ONLY) ----------------
+# ---------------- SPLIT ----------------
 def split_parts(name):
     name = clean_name(name)
-
-    # Normalize ALL special characters
     name = re.sub(r'[^\w]+', ' ', name)
-
     parts = name.split()
-
     return [p for p in parts if p]
 
 # ---------------- LOAD FILES ----------------
@@ -82,7 +78,7 @@ def load_files(zip_file, uploaded_files):
 
     return files
 
-# ---------------- DIFFERENCE (UNCHANGED) ----------------
+# ---------------- DIFFERENCE ----------------
 def get_difference(src, tgt):
     src_clean = clean_name(src)
     tgt_full = tgt
@@ -129,7 +125,6 @@ def match_file(src, files):
             else:
                 break
 
-        # VERSION-AWARE BOOST (SAFE ADDITION)
         if src_version and tgt_version and src_version == tgt_version:
             match_count += 1
 
@@ -137,25 +132,25 @@ def match_file(src, files):
             best_score = match_count
             best_match = f
 
-# -------- CLASSIFICATION (MINIMAL EXTENSION) --------
-if best_score >= 4:
-    return ["YES", "Exact", best_match, "-", "-"]
+    # -------- CLASSIFICATION (FIXED ONLY THIS BLOCK) --------
+    if best_score >= 4:
+        return ["YES", "Exact", best_match, "-", "-"]
 
-elif best_score == 3:
-    diff = get_difference(src, best_match)
-    return ["YES", "Close", best_match, "-", diff]
+    elif best_score == 3:
+        diff = get_difference(src, best_match)
+        return ["YES", "Close", best_match, "-", diff]
 
-elif best_score == 2:
-    diff = get_difference(src, best_match)
-    return ["YES", "Partial", best_match, "-", diff]
+    elif best_score == 2:
+        diff = get_difference(src, best_match)
+        return ["YES", "Partial", best_match, "-", diff]
 
-elif best_score == 1:
-    diff = get_difference(src, best_match)
-    return ["YES", "Partial", best_match, "-", diff]
+    elif best_score == 1:
+        diff = get_difference(src, best_match)
+        return ["YES", "Partial", best_match, "-", diff]
 
-else:
-    return ["NO", "Not Matched", "-", src, src]
-   
+    else:
+        return ["NO", "Not Matched", "-", src, src]
+
 # ---------------- RUN ----------------
 if st.button("🚀 Run Scan"):
 
@@ -215,4 +210,3 @@ if st.button("🚀 Run Scan"):
         df.to_csv(index=False),
         file_name="scan_report.csv"
     )
-    
