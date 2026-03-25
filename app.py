@@ -137,8 +137,8 @@ def match_file(src, files):
             best_score = match_count
             best_match = f
 
-    # -------- CLASSIFICATION (MINIMAL EXTENSION) --------
-   if best_score >= 4:
+# -------- CLASSIFICATION (MINIMAL EXTENSION) --------
+if best_score >= 4:
     return ["YES", "Exact", best_match, "-", "-"]
 
 elif best_score == 3:
@@ -155,7 +155,7 @@ elif best_score == 1:
 
 else:
     return ["NO", "Not Matched", "-", src, src]
-
+   
 # ---------------- RUN ----------------
 if st.button("🚀 Run Scan"):
 
@@ -215,3 +215,4 @@ if st.button("🚀 Run Scan"):
         df.to_csv(index=False),
         file_name="scan_report.csv"
     )
+    
