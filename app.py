@@ -201,7 +201,7 @@ if st.button("🚀 Run Scan"):
 st.session_state["df"] = df
 st.session_state["all_files"] = files
 
-    st.success("Scan Completed")
+st.success("Scan Completed")
 
     # ---------------- DASHBOARD ----------------
     c1, c2, c3, c4 = st.columns(4)
