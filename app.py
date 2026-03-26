@@ -14,31 +14,44 @@ st.markdown("""
     font-size:38px;
     font-weight:800;
     text-align:center;
-    margin-bottom:20px;
+    margin-bottom:10px;
 }
 .section {
     font-size:22px;
     font-weight:700;
     margin-top:20px;
 }
-.dataframe th {
-    font-size:18px !important;
-    font-weight:800 !important;
-    text-align:center !important;
-}
-.dataframe td {
-    font-size:16px !important;
+.helper {
+    font-size:15px;
+    color:#666;
+    margin-bottom:10px;
 }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="title">📂 Folder Scanner</div>', unsafe_allow_html=True)
 
+# ---------------- USER MANUAL ----------------
+with st.expander("📘 How to Use (Click Here)"):
+    st.markdown("""
+**Step 1:** Enter source file names (one per line)  
+**Step 2:** Upload ZIP folder OR multiple files  
+**Step 3:** Click **Run Scan**  
+**Step 4:** Review results (Exact / Close / Partial / Not Matched)  
+**Step 5:** Download report if needed  
+
+✔ Exact → Perfect match  
+✔ Close → Minor variation  
+✔ Partial → Partial match  
+✔ Not Matched → No match found  
+""")
+
 # ---------------- INPUT ----------------
-st.markdown('<div class="section">Source File Name (CCF, VSR, CSIR)</div>', unsafe_allow_html=True)
+st.markdown('<div class="section">1️⃣ Enter Source File Names (CCF, VSR, CSIR)</div>', unsafe_allow_html=True)
+st.markdown('<div class="helper">Enter one file name per line</div>', unsafe_allow_html=True)
 source_input = st.text_area("", height=200)
 
-st.markdown('<div class="section">Upload Folder / ZIP</div>', unsafe_allow_html=True)
+st.markdown('<div class="section">2️⃣ Upload Folder / ZIP</div>', unsafe_allow_html=True)
 uploaded_zip = st.file_uploader("Upload ZIP", type=["zip"])
 uploaded_files = st.file_uploader("Or Upload Files", accept_multiple_files=True)
 
@@ -48,7 +61,7 @@ def clean_name(name):
     name = re.sub(r'[\s_\-\.]*v\d+$', '', name, flags=re.IGNORECASE)
     return name.strip()
 
-# ---------------- NEW: VERSION EXTRACT ----------------
+# ---------------- VERSION ----------------
 def extract_version(name):
     match = re.search(r'v\d+', name, re.IGNORECASE)
     return match.group().lower() if match else None
@@ -132,7 +145,6 @@ def match_file(src, files):
             best_score = match_count
             best_match = f
 
-    # -------- CLASSIFICATION (FIXED ONLY THIS BLOCK) --------
     if best_score >= 4:
         return ["YES", "Exact", best_match, "-", "-"]
 
