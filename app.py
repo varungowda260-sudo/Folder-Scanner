@@ -197,9 +197,8 @@ if st.button("🚀 Run Scan"):
         "Matched Files in Folder","Unmatched Files","Difference"
     ])
 
-# ✅ STORE IN SESSION (FIXES FILTER BUG + EXTRA FILES)
+   # ✅ STORE IN SESSION (FIXES FILTER BUG)
     st.session_state["df"] = df
-    st.session_state["all_files"] = files
 
     st.success("Scan Completed")
 
@@ -241,16 +240,4 @@ if "df" in st.session_state:
         filtered_df.to_csv(index=False),
         file_name="scan_report.csv"
     )
-    # ---------------- EXTRA FILES FEATURE ----------------
-    st.markdown("### 📌 Extra Files Detected")
-
-    matched_files = set(filtered_df["Matched Files in Folder"])
-    all_files = set(st.session_state.get("all_files", []))
-
-    extra_files = [f for f in all_files if f not in matched_files and f != "-"]
-
-    if extra_files:
-        extra_df = pd.DataFrame(extra_files, columns=["Extra Files"])
-        st.dataframe(extra_df, use_container_width=True)
-    else:
-        st.success("No extra files found ✅")
+    
