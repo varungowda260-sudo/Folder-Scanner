@@ -149,7 +149,10 @@ def match_file(src, files):
             best_score = match_count
             best_match = f
 
-    # -------- YOUR EXACT CLASSIFICATION BLOCK --------
+    # ==========================================================
+    # 🔒 LOCKED CLASSIFICATION BLOCK - DO NOT MODIFY
+    # Any change here will affect matching behavior.
+    # ==========================================================
     if best_score >= 4:
         return ["YES", "Exact", best_match, "-", "-"]
 
@@ -167,6 +170,7 @@ def match_file(src, files):
 
     else:
         return ["NO", "Not Matched", "-", src, src]
+    # ==========================================================
 
 # ---------------- RUN ----------------
 if st.button("🚀 Run Scan"):
@@ -236,3 +240,16 @@ if "df" in st.session_state:
         filtered_df.to_csv(index=False),
         file_name="scan_report.csv"
     )
+    # ---------------- EXTRA FILES FEATURE ----------------
+    st.markdown("### 📌 Extra Files Detected")
+
+    matched_files = set(filtered_df["Matched Files in Folder"])
+    all_files = set(st.session_state["all_files"])
+
+    extra_files = [f for f in all_files if f not in matched_files and f != "-"]
+
+    if extra_files:
+        extra_df = pd.DataFrame(extra_files, columns=["Extra Files"])
+        st.dataframe(extra_df, use_container_width=True)
+    else:
+        st.success("No extra files found ✅")
