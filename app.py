@@ -57,7 +57,7 @@ with st.expander("📘 How to Use"):
 """)
 
 # ---------------- INPUT ----------------
-st.markdown('<div class="section">1️⃣ Enter Source File Names</div>', unsafe_allow_html=True)
+st.markdown('<div class="section">1️⃣ Enter Approved Source File Names</div>', unsafe_allow_html=True)
 source_input = st.text_area("", height=200)
 
 st.markdown('<div class="section">2️⃣ Upload Folder / ZIP</div>', unsafe_allow_html=True)
