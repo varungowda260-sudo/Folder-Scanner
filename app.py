@@ -193,6 +193,9 @@ if st.button("🚀 Run Scan"):
         "Matched Files in Folder","Unmatched Files","Difference"
     ])
 
+    # ✅ STORE IN SESSION (FIXES FILTER BUG)
+    st.session_state["df"] = df
+
     st.success("Scan Completed")
 
     # ---------------- DASHBOARD ----------------
@@ -202,17 +205,18 @@ if st.button("🚀 Run Scan"):
     c3.metric("Close", len(df[df["Match Type"]=="Close"]))
     c4.metric("Not Matched", len(df[df["YES/NO"]=="NO"]))
 
-    # ---------------- FILTER ----------------
-    filter_option = st.selectbox("Filter Results",
-        ["All","Exact","Close","Partial","Not Matched"])
+# ---------------- FILTER (WORKS WITHOUT RE-RUN) ----------------
+if "df" in st.session_state:
+
+    filter_option = st.selectbox(
+        "Filter Results",
+        ["All","Exact","Close","Partial","Not Matched"]
+    )
+
+    filtered_df = st.session_state["df"]
 
     if filter_option != "All":
-        df = df[df["Match Type"] == filter_option]
-
-    # ---------------- PREVIEW ----------------
-    if len(df) > 0:
-        selected = st.selectbox("Preview Row", df["Source File Name"])
-        st.write(df[df["Source File Name"] == selected])
+        filtered_df = filtered_df[filtered_df["Match Type"] == filter_option]
 
     # ---------------- COLOR ----------------
     def highlight(row):
@@ -225,7 +229,10 @@ if st.button("🚀 Run Scan"):
         else:
             return ['background-color:#ffcccc']*len(row)
 
-    st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
+    st.dataframe(filtered_df.style.apply(highlight, axis=1), use_container_width=True)
 
-    st.download_button("📥 Download Report",
-        df.to_csv(index=False), file_name="scan_report.csv")
+    st.download_button(
+        "📥 Download Report",
+        filtered_df.to_csv(index=False),
+        file_name="scan_report.csv"
+    )
