@@ -7,6 +7,16 @@ import pandas as pd
 
 st.set_page_config(page_title="Folder Scanner", layout="wide")
 
+# ---------------- DARK MODE TOGGLE ----------------
+dark_mode = st.toggle("🌙 Dark Mode")
+
+if dark_mode:
+    st.markdown("""
+    <style>
+    body, .stApp { background-color: #0e1117; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
+
 # ---------------- UI STYLE ----------------
 st.markdown("""
 <style>
@@ -23,8 +33,13 @@ st.markdown("""
 }
 .helper {
     font-size:15px;
-    color:#666;
-    margin-bottom:10px;
+    color:#888;
+}
+.card {
+    padding:15px;
+    border-radius:10px;
+    text-align:center;
+    font-weight:700;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -32,23 +47,17 @@ st.markdown("""
 st.markdown('<div class="title">📂 Folder Scanner</div>', unsafe_allow_html=True)
 
 # ---------------- USER MANUAL ----------------
-with st.expander("📘 How to Use (Click Here)"):
+with st.expander("📘 How to Use"):
     st.markdown("""
-**Step 1:** Enter source file names (one per line)  
-**Step 2:** Upload ZIP folder OR multiple files  
-**Step 3:** Click **Run Scan**  
-**Step 4:** Review results (Exact / Close / Partial / Not Matched)  
-**Step 5:** Download report if needed  
-
-✔ Exact → Perfect match  
-✔ Close → Minor variation  
-✔ Partial → Partial match  
-✔ Not Matched → No match found  
+1️⃣ Enter source file names  
+2️⃣ Upload ZIP or files  
+3️⃣ Click Run Scan  
+4️⃣ Use filters to analyze results  
+5️⃣ Download report  
 """)
 
 # ---------------- INPUT ----------------
-st.markdown('<div class="section">1️⃣ Enter Source File Names (CCF, VSR, CSIR)</div>', unsafe_allow_html=True)
-st.markdown('<div class="helper">Enter one file name per line</div>', unsafe_allow_html=True)
+st.markdown('<div class="section">1️⃣ Enter Source File Names</div>', unsafe_allow_html=True)
 source_input = st.text_area("", height=200)
 
 st.markdown('<div class="section">2️⃣ Upload Folder / ZIP</div>', unsafe_allow_html=True)
@@ -61,19 +70,16 @@ def clean_name(name):
     name = re.sub(r'[\s_\-\.]*v\d+$', '', name, flags=re.IGNORECASE)
     return name.strip()
 
-# ---------------- VERSION ----------------
 def extract_version(name):
     match = re.search(r'v\d+', name, re.IGNORECASE)
     return match.group().lower() if match else None
 
-# ---------------- SPLIT ----------------
 def split_parts(name):
     name = clean_name(name)
     name = re.sub(r'[^\w]+', ' ', name)
-    parts = name.split()
-    return [p for p in parts if p]
+    return [p for p in name.split() if p]
 
-# ---------------- LOAD FILES ----------------
+# ---------------- LOAD ----------------
 def load_files(zip_file, uploaded_files):
     files = []
     temp_dir = tempfile.mkdtemp()
@@ -95,7 +101,6 @@ def load_files(zip_file, uploaded_files):
 def get_difference(src, tgt):
     src_clean = clean_name(src)
     tgt_full = tgt
-
     tgt_clean = clean_name(tgt_full)
     ext = os.path.splitext(tgt_full)[1]
 
@@ -117,9 +122,8 @@ def get_difference(src, tgt):
 
     return ext if ext else "-"
 
-# ---------------- MATCH LOGIC ----------------
+# ---------------- MATCH ----------------
 def match_file(src, files):
-    src = src.strip()
     src_parts = split_parts(src)
     src_version = extract_version(src)
 
@@ -145,6 +149,7 @@ def match_file(src, files):
             best_score = match_count
             best_match = f
 
+    # -------- YOUR EXACT CLASSIFICATION BLOCK --------
     if best_score >= 4:
         return ["YES", "Exact", best_match, "-", "-"]
 
@@ -171,54 +176,56 @@ if st.button("🚀 Run Scan"):
         st.stop()
 
     files = load_files(uploaded_zip, uploaded_files)
-
-    if not files:
-        st.warning("Upload ZIP or files")
-        st.stop()
-
     sources = [s.strip() for s in source_input.split("\n") if s.strip()]
 
-    progress = st.progress(0)
-    total = len(sources)
+    progress_text = st.empty()
+    progress_bar = st.progress(0)
 
     results = []
 
     for i, src in enumerate(sources):
-        res = match_file(src, files)
-        results.append([src] + res)
-        progress.progress((i + 1) / total)
+        progress_text.text(f"Processing {i+1}/{len(sources)}...")
+        results.append([src] + match_file(src, files))
+        progress_bar.progress((i + 1) / len(sources))
 
     df = pd.DataFrame(results, columns=[
-        "Source File Name",
-        "YES/NO",
-        "Match Type",
-        "Matched Files in Folder",
-        "Unmatched Files",
-        "Difference"
+        "Source File Name","YES/NO","Match Type",
+        "Matched Files in Folder","Unmatched Files","Difference"
     ])
 
     st.success("Scan Completed")
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total", len(df))
-    col2.metric("Exact", len(df[df["Match Type"] == "Exact"]))
-    col3.metric("Close", len(df[df["Match Type"] == "Close"]))
-    col4.metric("Not Matched", len(df[df["YES/NO"] == "NO"]))
+    # ---------------- DASHBOARD ----------------
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total", len(df))
+    c2.metric("Exact", len(df[df["Match Type"]=="Exact"]))
+    c3.metric("Close", len(df[df["Match Type"]=="Close"]))
+    c4.metric("Not Matched", len(df[df["YES/NO"]=="NO"]))
 
+    # ---------------- FILTER ----------------
+    filter_option = st.selectbox("Filter Results",
+        ["All","Exact","Close","Partial","Not Matched"])
+
+    if filter_option != "All":
+        df = df[df["Match Type"] == filter_option]
+
+    # ---------------- PREVIEW ----------------
+    if len(df) > 0:
+        selected = st.selectbox("Preview Row", df["Source File Name"])
+        st.write(df[df["Source File Name"] == selected])
+
+    # ---------------- COLOR ----------------
     def highlight(row):
         if row["Match Type"] == "Exact":
-            return ['background-color: #d4edda'] * len(row)
+            return ['background-color:#d4edda']*len(row)
         elif row["Match Type"] == "Close":
-            return ['background-color: #fff3cd'] * len(row)
+            return ['background-color:#fff3cd']*len(row)
         elif row["Match Type"] == "Partial":
-            return ['background-color: #ffe5b4'] * len(row)
+            return ['background-color:#ffe5b4']*len(row)
         else:
-            return ['background-color: #ffcccc'] * len(row)
+            return ['background-color:#ffcccc']*len(row)
 
     st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True)
 
-    st.download_button(
-        "📥 Download Report",
-        df.to_csv(index=False),
-        file_name="scan_report.csv"
-    )
+    st.download_button("📥 Download Report",
+        df.to_csv(index=False), file_name="scan_report.csv")
