@@ -197,8 +197,9 @@ if st.button("🚀 Run Scan"):
         "Matched Files in Folder","Unmatched Files","Difference"
     ])
 
-    # ✅ STORE IN SESSION (FIXES FILTER BUG)
-    st.session_state["df"] = df
+# ✅ STORE IN SESSION (FIXES FILTER BUG + EXTRA FILES)
+st.session_state["df"] = df
+st.session_state["all_files"] = files
 
     st.success("Scan Completed")
 
@@ -244,7 +245,7 @@ if "df" in st.session_state:
     st.markdown("### 📌 Extra Files Detected")
 
     matched_files = set(filtered_df["Matched Files in Folder"])
-    all_files = set(st.session_state["all_files"])
+    all_files = set(st.session_state.get("all_files", []))
 
     extra_files = [f for f in all_files if f not in matched_files and f != "-"]
 
