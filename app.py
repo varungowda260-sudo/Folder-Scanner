@@ -283,26 +283,38 @@ if "df" in st.session_state:
             return ['background-color:#ffcccc']*len(row)
 
     st.markdown("""
-    <style>
-    .scroll-container {
-        overflow-x: auto;
-        overflow-y: auto;
-        max-height: 500px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
+      <style>
+
+/* FORCE horizontal scroll */
+     div[data-testid="stDataFrame"] {
+     overflow-x: auto !important;
 }
-     </style>
+
+/* Ensure table expands beyond container */
+     div[data-testid="stDataFrame"] > div {
+     min-width: 1200px;
+}
+
+/* Improve scrollbar visibility */
+     ::-webkit-scrollbar {
+     height: 10px;
+}
+     ::-webkit-scrollbar-thumb {
+     background: #888;
+     border-radius: 5px;
+}
+     ::-webkit-scrollbar-thumb:hover {
+     background: #555;
+}
+
+      </style>
         """, unsafe_allow_html=True)
 
-    st.markdown('<div class="scroll-container">', unsafe_allow_html=True)
-
     st.dataframe(
-          filtered_df.style.apply(highlight, axis=1),
-          use_container_width=False,
-          height=500
+        filtered_df.style.apply(highlight, axis=1),
+        use_container_width=False,
+        height=500
 )
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
     st.download_button(
         "📥 Download Report",
