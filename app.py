@@ -282,7 +282,27 @@ if "df" in st.session_state:
         else:
             return ['background-color:#ffcccc']*len(row)
 
-    st.dataframe(filtered_df.style.apply(highlight, axis=1), use_container_width=True)
+    st.markdown("""
+    <style>
+    .scroll-container {
+        overflow-x: auto;
+        overflow-y: auto;
+        max-height: 500px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+}
+     </style>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="scroll-container">', unsafe_allow_html=True)
+
+    st.dataframe(
+          filtered_df.style.apply(highlight, axis=1),
+          use_container_width=False,
+          height=500
+)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.download_button(
         "📥 Download Report",
